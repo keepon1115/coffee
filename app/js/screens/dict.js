@@ -8,8 +8,10 @@ import { beanTitle, isBlank, formatDateShort } from '../model.js';
 import { sortedBeans } from '../related.js';
 import { beanCard, bookmarkButton, kindHref, enc, infoTag, sourceBlock, usageCounts, beansFor, storeKey, PDF_CHECKED } from './common.js';
 import { notFound } from './note.js';
+import { illust } from '../illust.js';
 
 const state = { onlyNew: false };
+const STAGE_ART = { farm: 'cherry', processing: 'drying', roasting: 'roaster', brewing: 'dripper' };
 
 const GROUPS = {
   country: [
@@ -37,13 +39,13 @@ export function dictHome(ctx) {
   });
   root.append(input, results);
 
-  const entry = (href, title, sub) => h('a', { class: 'card', href }, h('h3', { text: title }), h('div', { class: 'meta', text: sub }));
+  const entry = (href, title, sub, art) => h('a', { class: 'card' + (art ? ' has-illust' : ''), href }, art ? illust(art, { size: 44, cls: 'illust-corner' }) : null, h('h3', { text: title }), h('div', { class: 'meta', text: sub }));
   root.append(
     h('h2', { text: '引いてみる' }),
-    entry('#/dict/country', '産地', `${COUNTRIES.length}か国　記録のある国 ${used.country.size}`),
-    entry('#/dict/variety', '品種', `${VARIETIES.length}種類　記録のある品種 ${used.variety.size}`),
-    entry('#/dict/process', '精製', `${PROCESSES.length}種類　記録のある精製 ${used.process.size}`),
-    entry('#/journey', '一杯が届くまで', '農園 → 精製 → 焙煎 → 抽出'),
+    entry('#/dict/country', '産地', `${COUNTRIES.length}か国　記録のある国 ${used.country.size}`, 'map'),
+    entry('#/dict/variety', '品種', `${VARIETIES.length}種類　記録のある品種 ${used.variety.size}`, 'cherry'),
+    entry('#/dict/process', '精製', `${PROCESSES.length}種類　記録のある精製 ${used.process.size}`, 'drying'),
+    entry('#/journey', '一杯が届くまで', '農園 → 精製 → 焙煎 → 抽出', 'dripper'),
     h('h2', { text: 'そのほか' }),
     entry('#/themes', '比べ方のテーマ', '一度に変えるのは一つだけ、など'),
     entry('#/history', 'スペシャルティコーヒーの歩み', '世界と日本の年表'),
@@ -217,7 +219,7 @@ export function journey(ctx, _p, query) {
 
   const line = h('div', { class: 'journey' });
   for (const st of JOURNEY) {
-    const stage = h('section', { class: 'stage' }, h('h2', { text: st.title }), h('p', { class: 'muted', style: 'margin-top:0', text: st.lead }));
+    const stage = h('section', { class: 'stage' }, h('h2', {}, illust(STAGE_ART[st.id], { cls: 'illust-inline' }), st.title), h('p', { class: 'muted', style: 'margin-top:0', text: st.lead }));
     for (const c of st.cards) {
       stage.append(h('details', { class: 'card' }, h('summary', {}, c.title, ' ', infoTag(c.type, c.conf)), h('p', { class: 'pre', text: c.body })));
     }

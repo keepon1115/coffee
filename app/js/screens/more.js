@@ -9,6 +9,7 @@ import { buildBackup, backupFileName, validateBackup, restoreBackup, parseBackup
 import { readXlsx } from '../xlsx.js';
 import { parseSheet, buildPlan, applyPlan } from '../importer.js';
 import { notFound } from './note.js';
+import { illust } from '../illust.js';
 
 // ───────── 比較 ─────────
 export function compare(ctx, _p, query) {
@@ -118,7 +119,7 @@ export function saved(ctx) {
   const all = [...repo.bookmarks.values()];
   const cmps = [...repo.comparisons.values()];
   if (!all.length && !cmps.length) {
-    root.append(h('div', { class: 'empty' }, h('p', { text: 'まだ何も保存していません。' }), h('p', { class: 'small', text: '事典や豆のページの「☆ 気になる」を押すと、ここに残ります。' }), h('a', { class: 'btn', href: '#/dict', text: '事典を開く' })));
+    root.append(h('div', { class: 'empty' }, illust('notebook', { size: 88, cls: 'illust-hero' }), h('p', { text: 'まだ何も保存していません。' }), h('p', { class: 'small', text: '事典や豆のページの「☆ 気になる」を押すと、ここに残ります。' }), h('a', { class: 'btn', href: '#/dict', text: '事典を開く' })));
     return { title: '気になる', tab: 'saved', node: root };
   }
   const order = ['country', 'variety', 'process', 'store', 'bean', 'theme'];

@@ -121,6 +121,6 @@ export const KIND_ORDER = ['country', 'variety', 'process', 'store', 'bean', 'th
 for (const name of ['append', 'prepend', 'replaceChildren']) {
   for (const proto of [Element.prototype, DocumentFragment.prototype]) {
     const orig = proto[name];
-    proto[name] = function (...args) { return orig.apply(this, args.filter((a) => a != null && a !== false)); };
+    proto[name] = function (...args) { return orig.apply(this, args.flat(Infinity).filter((a) => a != null && a !== false)); };
   }
 }

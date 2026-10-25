@@ -83,17 +83,50 @@ export function comparisonCandidates(bean, repo) {
   return out;
 }
 
-/** ノートの「この一杯から」1件。比較候補があればそれ、無ければ事典への入口 */
-export function homeSuggestion(repo) {
-  const bean = sortedBeans(repo)[0];
-  if (!bean) return null;
-  const cands = comparisonCandidates(bean, repo);
-  if (cands.length) return { bean, type: 'compare', cand: cands[0] };
-  const n = bean.norm || {};
-  if (n.varietyIds?.length) return { bean, type: 'article', kind: 'variety', id: n.varietyIds[0], text: `品種「${names('variety', [n.varietyIds[0]])[0]}」の背景を読む`, basis: '品種の記録から' };
-  if (n.processIds?.length) return { bean, type: 'article', kind: 'process', id: n.processIds[0], text: `精製「${names('process', [n.processIds[0]])[0]}」の工程を読む`, basis: '精製の記録から' };
-  if (n.countryId) return { bean, type: 'article', kind: 'country', id: n.countryId, text: `${names('country', [n.countryId])[0]}の背景を読む`, basis: '国の記録から' };
-  return { bean, type: 'article', kind: 'theme', id: 'same-roast', text: '比べ方のヒントを読む', basis: '事典の一般的な比較テーマ（あなたの記録に基づく分析ではありません）' };
+/** 提案のプール: 全部の豆から、比較の候補と事典への入口を集める（同じ組・同じ記事は1件） */
+export function suggestionPool(repo) {
+  const beans = sortedBeans(repo);
+  const compare = [], article = [];
+  const seenCmp = new Set(), seenArt = new Set();
+  for (const bean of beans) {
+    for (const cand of comparisonCandidates(bean, repo).slice(0, 3)) {
+      const key = 'cmp:' + [bean.id, cand.other.id].sort().join('|');
+      if (seenCmp.has(key)) continue;
+      seenCmp.add(key);
+      compare.push({ key, bean, type: 'compare', cand });
+    }
+    const n = bean.norm || {};
+    const arts = [
+      ...(n.varietyIds || []).map((id) => ({ kind: 'variety', id, text: '品種「' + names('variety', [id])[0] + '」の背景を読む', basis: '品種の記録から' })),
+      ...(n.processIds || []).map((id) => ({ kind: 'process', id, text: '精製「' + names('process', [id])[0] + '」の工程を読む', basis: '精製の記録から' })),
+      ...(n.countryId ? [{ kind: 'country', id: n.countryId, text: names('country', [n.countryId])[0] + 'の背景を読む', basis: '国の記録から' }] : []),
+    ];
+    for (const art of arts) {
+      const key = 'art:' + art.kind + ':' + art.id;
+      if (seenArt.has(key)) continue;
+      seenArt.add(key);
+      article.push({ key, bean, type: 'article', ...art });
+    }
+  }
+  return { compare, article, beans };
+}
+
+/**
+ * ノートの「この一杯から」1件。全部の豆からランダムに選ぶ（比較と事典を半々）。
+ * exclude: 直前に出した提案のkey（候補が2件以上あれば除く）。rng: テスト用に差し替え可。
+ */
+export function homeSuggestion(repo, { rng = Math.random, exclude } = {}) {
+  const { compare, article, beans } = suggestionPool(repo);
+  if (!beans.length) return null;
+  const pick = (list) => list[Math.min(list.length - 1, Math.floor(rng() * list.length))];
+  const all = [...compare, ...article];
+  if (!all.length) {
+    return { key: 'theme:same-roast', bean: beans[0], type: 'article', kind: 'theme', id: 'same-roast', text: '比べ方のヒントを読む', basis: '事典の一般的な比較テーマ（あなたの記録に基づく分析ではありません）' };
+  }
+  const usable = (list) => (all.length > 1 && exclude ? list.filter((x) => x.key !== exclude) : list);
+  let c = usable(compare), a = usable(article);
+  const wantCompare = c.length && (!a.length || rng() < 0.5);
+  return pick(wantCompare ? c : a);
 }
 
 /** 2つの豆の共通点・違い（因果は述べない） */

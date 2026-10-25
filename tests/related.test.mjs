@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Repo, createMemoryAdapter } from '../app/js/db.js';
 import { makeBean, makeTasting, parseDate } from '../app/js/model.js';
-import { findTerms, comparisonCandidates, homeSuggestion, compareBeans, sortedBeans } from '../app/js/related.js';
+import { findTerms, comparisonCandidates, homeSuggestion, suggestionPool, compareBeans, sortedBeans } from '../app/js/related.js';
 import { searchKnowledge, matchStoreInfo, COUNTRIES, VARIETIES, PROCESSES, SOURCES, getArticle } from '../app/js/knowledge.js';
 
 const repoWith = async (specs) => {
@@ -50,7 +50,7 @@ test('「この一杯から」: 候補が無ければ事典の入口、記録が
   const empty = await repoWith([]);
   assert.equal(homeSuggestion(empty.repo), null);
   const { repo } = await repoWith([[{ name: '単独', country: 'タイ', variety: 'Catuai', process: 'Washed' }, 'メモ', '26/10']]);
-  const s = homeSuggestion(repo);
+  const s = homeSuggestion(repo, { rng: () => 0 });
   assert.equal(s.type, 'article');
   assert.equal(s.kind, 'variety');
   assert.equal(s.id, 'catuai');
@@ -98,4 +98,23 @@ test('事典検索と店の一致', () => {
   assert.ok(searchKnowledge('スマトラ').some((r) => r.kind === 'process' && r.id === 'wet-hulled'));
   assert.equal(matchStoreInfo('LIGHT UP COFFEE').id, 'lightup');
   assert.equal(matchStoreInfo('雪人 (八尾)'), null);
+});
+
+test('「この一杯から」: 全部の豆から選ぶ・同じ組は1件・rng固定で再現・excludeが効く', async () => {
+  const { repo, beans } = await repoWith([
+    [{ name: 'A', country: 'ブラジル', variety: 'Bourbon', process: 'Natural' }, 'ナッツ', '25/9'],
+    [{ name: 'B', country: 'ケニア', variety: 'Bourbon', process: 'Washed' }, 'ナッツ', '26/1'],
+    [{ name: 'C', country: 'ルワンダ', variety: 'ブルボン', process: 'Washed' }, 'x', '26/10'],
+  ]);
+  const pool = suggestionPool(repo);
+  const keys = pool.compare.map((c) => c.key);
+  assert.equal(new Set(keys).size, keys.length, '同じ組（A×BとB×A）は1件');
+  // 最新(C)以外の豆を含む提案が出うる
+  const seenBeans = new Set();
+  for (let i = 0; i < 40; i++) seenBeans.add(homeSuggestion(repo, { rng: () => i / 40 }).bean.id);
+  assert.ok(seenBeans.size > 1, '最新の豆だけに偏らない');
+  assert.deepEqual(homeSuggestion(repo, { rng: () => 0.3 }).key, homeSuggestion(repo, { rng: () => 0.3 }).key);
+  const first = homeSuggestion(repo, { rng: () => 0.2 });
+  for (let i = 0; i < 20; i++) assert.notEqual(homeSuggestion(repo, { rng: () => i / 20, exclude: first.key }).key, first.key);
+  assert.ok(beans.length === 3);
 });

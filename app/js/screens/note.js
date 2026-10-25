@@ -6,6 +6,7 @@ import {
 } from '../model.js';
 import { COUNTRIES, VARIETIES, PROCESSES, getCountry, getVariety, getProcess, normKey, articleTitle } from '../knowledge.js';
 import { sortedBeans, comparisonCandidates, homeSuggestion } from '../related.js';
+import { illust } from '../illust.js';
 import { beanCard, bookmarkButton, kindHref, enc, sortTastings, usageCounts, storeLink, infoTag } from './common.js';
 
 const session = { q: '', country: '', variety: '', process: '', limit: 40 };
@@ -22,6 +23,7 @@ export function home(ctx) {
 
   if (repo.beans.size === 0) {
     root.append(h('div', { class: 'card', style: 'margin-top:16px' },
+      h('div', { class: 'illust-row' }, illust('cup', { size: 96, cls: 'illust-hero' }), illust('beans', { size: 56 })),
       h('h2', { style: 'margin-top:0', text: 'ここから始めます' }),
       h('p', { text: 'まだ記録がありません。飲んだ豆をひとつ記録するか、これまでのExcelを取り込めます。' }),
       h('a', { class: 'btn btn-block', href: '#/import', text: 'Excel（コーヒー探究.xlsx）から取り込む' }),
@@ -29,8 +31,18 @@ export function home(ctx) {
     return { title: 'ノート', tab: 'note', node: root };
   }
 
-  const sg = homeSuggestion(repo);
-  if (sg) root.append(suggestionCard(ctx, sg));
+  const sgBox = h('div');
+  const showSuggestion = (reroll) => {
+    const prev = readLastSuggestion();
+    const sg = homeSuggestion(repo, { exclude: prev });
+    sgBox.replaceChildren();
+    if (!sg) return;
+    saveLastSuggestion(sg.key);
+    sgBox.append(suggestionCard(ctx, sg, () => showSuggestion(true)));
+    if (reroll) sgBox.querySelector('.suggest')?.focus();
+  };
+  showSuggestion(false);
+  root.append(sgBox);
 
   // 検索と絞り込み
   const input = h('input', { type: 'search', id: 'q', placeholder: '豆名・店・国・感想で探す', value: session.q, 'aria-label': '検索', enterkeyhint: 'search', autocomplete: 'off' });
@@ -73,21 +85,29 @@ export function home(ctx) {
   return { title: 'ノート', tab: 'note', node: root };
 }
 
-function suggestionCard(ctx, sg) {
+const LAST_KEY = 'tankyu:lastSuggestion';
+function readLastSuggestion() { try { return sessionStorage.getItem(LAST_KEY) || undefined; } catch { return undefined; } }
+function saveLastSuggestion(key) { try { sessionStorage.setItem(LAST_KEY, key); } catch { /* 任意 */ } }
+
+function suggestionCard(ctx, sg, onReroll) {
   const title = beanTitle(sg.bean);
-  const box = h('div', { class: 'suggest' }, h('div', { class: 'lab', text: 'この一杯から' }));
+  const box = h('div', { class: 'suggest has-illust', tabindex: '-1' }, illust('bean', { size: 44, cls: 'illust-corner' }), h('div', { class: 'lab', text: 'この一杯から' }));
+  const taste = (bean, label) => h('a', { class: 'small', style: 'display:inline-block;min-height:44px;line-height:44px', href: `#/bean/${enc(bean.id)}/taste`, text: label });
   if (sg.type === 'compare') {
     const c = sg.cand;
     box.append(
       h('p', { style: 'margin:4px 0' }, `「${title}」と「${beanTitle(c.other)}」を比べてみる`),
       h('p', { class: 'small muted', style: 'margin:0', text: `理由: ${c.reason}（${c.basis}）` }),
-      h('a', { class: 'btn btn-block', href: `#/compare?a=${enc(sg.bean.id)}&b=${enc(c.other.id)}&reason=${enc(c.reason)}&theme=${enc(c.themeId || '')}`, text: '2つを並べて読む' }));
+      h('a', { class: 'btn btn-block', href: `#/compare?a=${enc(sg.bean.id)}&b=${enc(c.other.id)}&reason=${enc(c.reason)}&theme=${enc(c.themeId || '')}`, text: '2つを並べて読む' }),
+      h('div', { class: 'row' }, taste(sg.bean, `「${title}」に感想を追記`), taste(c.other, `「${beanTitle(c.other)}」に感想を追記`)));
   } else {
     box.append(
       h('p', { style: 'margin:4px 0' }, `「${title}」から: ${sg.text}`),
       h('p', { class: 'small muted', style: 'margin:0', text: `理由: ${sg.basis}` }),
-      h('a', { class: 'btn btn-block', href: kindHref(sg.kind, sg.id), text: '事典で読む' }));
+      h('a', { class: 'btn btn-block', href: kindHref(sg.kind, sg.id), text: sg.kind === 'theme' ? '事典で読む' : '事典で読む' }),
+      sg.kind === 'theme' ? null : h('div', { class: 'row' }, taste(sg.bean, `「${title}」に感想を追記`)));
   }
+  box.append(h('button', { class: 'btn btn-quiet btn-small', type: 'button', style: 'margin-top:4px', text: '↻ ほかの提案', onClick: onReroll }));
   return box;
 }
 
@@ -126,7 +146,7 @@ export function beanDetail(ctx, { id }) {
 
   // 感想の履歴
   root.append(h('h2', { text: `自分の感想（${tastings.length}件）` }));
-  if (!tastings.length) root.append(h('p', { class: 'muted', text: 'まだ感想はありません。感想がなくてもこの記録は有効です。' }));
+  if (!tastings.length) root.append(h('p', { class: 'muted' }, illust('cup', { size: 36, cls: 'illust-inline' }), 'まだ感想はありません。感想がなくてもこの記録は有効です。'));
   for (const t of tastings) {
     root.append(h('div', { class: 'mine-box' },
       h('div', { class: 'when' }, formatDate(tastingDate(t)), t.source?.type === 'xlsx' ? '　（Excelから）' : ''),
@@ -173,7 +193,7 @@ export function beanDetail(ctx, { id }) {
 }
 
 function notFound(msg) {
-  return { title: '見つかりません', tab: 'note', back: '#/', node: h('div', { class: 'empty' }, h('p', { text: msg }), h('a', { class: 'btn', href: '#/', text: 'ノートへ戻る' })) };
+  return { title: '見つかりません', tab: 'note', back: '#/', node: h('div', { class: 'empty' }, illust('beans', { size: 72, cls: 'illust-hero' }), h('p', { text: msg }), h('a', { class: 'btn', href: '#/', text: 'ノートへ戻る' })) };
 }
 
 // ───────── 日付入力 ─────────

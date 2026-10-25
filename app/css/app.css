@@ -189,3 +189,15 @@ mark { background: #F1E2B8; color: inherit; border-radius: 2px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
 @media (min-width: 700px) { body { font-size: 17px; } }
 @media (max-width: 359px) { dl.kv > div { grid-template-columns: 1fr; gap: 0; } }
+
+/* ── 線画イラスト（装飾。文字にはかけない） ── */
+.illust { width: var(--size, 48px); height: var(--size, 48px); flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; color: #A8947F; }
+.illust-corner { position: absolute; top: 10px; right: 12px; opacity: .85; pointer-events: none; }
+.has-illust { position: relative; padding-right: 76px; }
+.illust-hero { display: block; margin: 8px auto 0; color: var(--accent); opacity: .7; }
+.illust-row { display: flex; gap: 12px; justify-content: center; align-items: flex-end; margin: 4px 0 8px; }
+.illust-inline { vertical-align: middle; margin-right: 8px; width: 28px; height: 28px; --size: 28px; }
+@media (prefers-reduced-motion: no-preference) {
+  .illust-hero .steam { animation: sway 5s ease-in-out infinite; transform-origin: 50% 100%; }
+  @keyframes sway { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(1.5px); } }
+}
