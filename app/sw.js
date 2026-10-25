@@ -1,6 +1,6 @@
 // 探究コーヒー: オフライン用 Service Worker。
 // ASSETS と VERSION は tools/build-sw.mjs が自動で書き換える（手で編集しない）。
-const VERSION = '022fb99083';
+const VERSION = '76a837a02a';
 const ASSETS = [
   "./",
   "./css/app.css",

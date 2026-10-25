@@ -5,7 +5,7 @@ import { KIND_LABEL, articleTitle, getTheme, normKey } from '../knowledge.js';
 import { KNOWLEDGE_VERSION as KV } from '../knowledge-data.js';
 import { comparisonCandidates, compareBeans, sortedBeans, findTerms } from '../related.js';
 import { sortTastings, kindHref, enc, beanMeta, infoTag } from './common.js';
-import { buildBackup, backupFileName, validateBackup, restoreBackup, parseBackupText, buildCsv } from '../backup.js';
+import { buildBackup, backupFileName, validateBackup, restoreBackup, parseBackupText, buildCsv, planMerge, applyMerge } from '../backup.js';
 import { readXlsx } from '../xlsx.js';
 import { parseSheet, buildPlan, applyPlan } from '../importer.js';
 import { notFound } from './note.js';
@@ -191,6 +191,7 @@ export function settings(ctx) {
 
   // バックアップ
   const fileIn = h('input', { type: 'file', accept: 'application/json,.json', hidden: true, onChange: (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) restoreFlow(ctx, f); } });
+  const mergeIn = h('input', { type: 'file', accept: 'application/json,.json', hidden: true, onChange: (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) mergeFlow(ctx, f); } });
   root.append(
     h('h2', { text: 'バックアップ' }),
     h('button', { class: 'btn btn-primary btn-block', type: 'button', text: '完全バックアップを書き出す（JSON）', onClick: () => guarded(async () => {
@@ -201,7 +202,9 @@ export function settings(ctx) {
       if (r !== 'cancel') { await repo.saveSettings({ lastBackupAt: now.toISOString() }); toast('バックアップを書き出しました'); ctx.rerender(); }
     }, '書き出せませんでした') }),
     h('p', { class: 'small muted', text: '豆・感想・気になる・比較をすべて含みます。復元はこのJSONで行います。' }),
-    h('button', { class: 'btn btn-block', type: 'button', text: 'JSONバックアップから復元…', onClick: () => fileIn.click() }), fileIn,
+    h('button', { class: 'btn btn-block', type: 'button', text: '別の端末のJSONを統合して取り込む…', onClick: () => mergeIn.click() }), mergeIn,
+    h('p', { class: 'small muted', text: 'PCとスマホの記録を足し合わせます。いまの記録は消えません。同じ記録は新しい方を残し、感想は両方残ります。片方で削除した記録は、もう片方から戻ってくることがあります。' }),
+    h('button', { class: 'btn btn-block', type: 'button', text: 'JSONバックアップから復元（置き換え）…', onClick: () => fileIn.click() }), fileIn,
     h('p', { class: 'small muted', text: '復元すると、いまの記録は読み込む内容で置き換わります。実行前に件数を確認できます。' }),
     h('button', { class: 'btn btn-block', type: 'button', text: 'Excel向けにCSVで書き出す', onClick: () => guarded(async () => {
       await saveFile(`tankyu-coffee-${new Date().toISOString().slice(0, 10)}.csv`, new Blob([buildCsv(repo)], { type: 'text/csv;charset=utf-8' }));
@@ -222,6 +225,28 @@ export function settings(ctx) {
     h('h2', { text: 'このアプリについて' }),
     h('p', { class: 'small muted', text: `事典データ版: ${KV}　保存形式: schemaVersion 1　点数・ランキング・SNS・クラウド同期はありません。事典の内容は元の資料の記載を編集したもので、出典と確認時点を各ページに示しています。` }));
   return { title: '設定とデータ', tab: null, back: '#/', node: root };
+}
+
+async function mergeFlow(ctx, file) {
+  const { repo } = ctx;
+  await guarded(async () => {
+    const obj = parseBackupText(await file.text());
+    const v = validateBackup(obj);
+    if (!v.ok) { await confirmDialog({ title: '統合できません', body: `${v.errors.join('\n')}\n\nいまの記録は変更していません。`, ok: '閉じる', cancel: '' }); return; }
+    const plan = planMerge(repo, obj);
+    const s = plan.summary;
+    if (!plan.changes) { await confirmDialog({ title: '足す内容はありません', body: 'このファイルの記録は、すべていまの記録に入っています。', ok: '閉じる', cancel: '' }); return; }
+    const when = v.exportedAt ? '（' + new Date(v.exportedAt).toLocaleString('ja-JP') + ' 書き出し）' : '';
+    const body = ['ファイル「' + file.name + '」' + when, '',
+      '豆: 追加 ' + s.beansAdded + '・更新 ' + s.beansUpdated + '・同じ ' + s.beansSame,
+      '感想: 追加 ' + s.tastingsAdded + '・更新 ' + s.tastingsUpdated + '・同じ ' + s.tastingsSame,
+      '気になる: 追加 ' + s.bookmarksAdded,
+      '比較: 追加 ' + s.comparisonsAdded + '・更新 ' + s.comparisonsUpdated, '', 'いまの記録は消えません。'].join('\n');
+    if (!(await confirmDialog({ title: '統合しますか？', body, ok: '統合する' }))) return;
+    await applyMerge(repo, plan);
+    toast('統合しました');
+    ctx.go('#/', { replace: true });
+  }, '統合できませんでした（いまの記録は変更していません）');
 }
 
 async function restoreFlow(ctx, file) {

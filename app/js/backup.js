@@ -1,4 +1,5 @@
 // 完全バックアップ（JSON）と Excel 向け CSV。
+import { deriveNorm } from './knowledge.js';
 import { SCHEMA_VERSION, formatDate, tastingDate, dateSortKey } from './model.js';
 
 export const BACKUP_APP = 'tankyu-coffee';
@@ -123,4 +124,84 @@ export function buildCsv(repo) {
     }
   }
   return '﻿' + rows.map((r) => r.map(csvCell).join(',')).join('\r\n') + '\r\n';
+}
+
+// ───── 統合（別の端末のJSONを、いまの記録に足し合わせる） ─────
+// 突き合わせ: id → （Excel由来なら）取り込み行の識別子 → 無ければ新規追加。
+// 同じ記録が両方にあるときは updatedAt が新しい方を残す。削除は伝えない（片方で消した記録は、もう片方から戻ってくる）。
+export function planMerge(repo, obj) {
+  const v = validateBackup(obj);
+  if (!v.ok) throw new Error(v.errors.join('\n'));
+  const d = obj.data;
+  const ops = [];
+  const s = { beansAdded: 0, beansUpdated: 0, beansSame: 0, tastingsAdded: 0, tastingsUpdated: 0, tastingsSame: 0, bookmarksAdded: 0, comparisonsAdded: 0, comparisonsUpdated: 0 };
+  // 内容が同じなら更新扱いにしない（別々にExcel取り込みした同じ行など）
+  const sortKeys = (v) => (Array.isArray(v) ? v.map(sortKeys) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortKeys(v[k])])) : v);
+  const strip = ({ id, beanId, createdAt, updatedAt, source, norm, beanIds, tastingIds, ...rest }) => JSON.stringify(sortKeys(rest));
+  const newer = (a, b) => (a.updatedAt || '') > (b.updatedAt || '') && strip(a) !== strip(b);
+
+  // 豆
+  const byKey = new Map();
+  for (const b of repo.beans.values()) if (b.source?.type === 'xlsx' && b.source.key) byKey.set(b.source.key, b);
+  const beanMap = new Map(); // 取り込む側のid → いまの記録でのid
+  for (const inc of d.beans) {
+    const local = repo.beans.get(inc.id) || (inc.source?.type === 'xlsx' && inc.source.key ? byKey.get(inc.source.key) : null);
+    if (!local) {
+      beanMap.set(inc.id, inc.id);
+      ops.push(['put', 'beans', { ...inc, norm: deriveNorm(inc) }]);
+      s.beansAdded++;
+    } else {
+      beanMap.set(inc.id, local.id);
+      if (newer(inc, local)) { ops.push(['put', 'beans', { ...inc, id: local.id, norm: deriveNorm(inc) }]); s.beansUpdated++; } else s.beansSame++;
+    }
+  }
+
+  // 感想
+  const tastingMap = new Map();
+  const localByKey = new Map();
+  for (const t of repo.tastings.values()) if (t.source?.type === 'xlsx' && t.source.key) localByKey.set(`${t.beanId}|${t.source.key}`, t);
+  for (const inc of d.tastings) {
+    const beanId = beanMap.get(inc.beanId);
+    const local = repo.tastings.get(inc.id) || (inc.source?.type === 'xlsx' && inc.source.key ? localByKey.get(`${beanId}|${inc.source.key}`) : null);
+    if (!local) {
+      tastingMap.set(inc.id, inc.id);
+      ops.push(['put', 'tastings', { ...inc, beanId }]);
+      s.tastingsAdded++;
+    } else {
+      tastingMap.set(inc.id, local.id);
+      if (newer(inc, local)) { ops.push(['put', 'tastings', { ...inc, id: local.id, beanId: local.beanId }]); s.tastingsUpdated++; } else s.tastingsSame++;
+    }
+  }
+
+  // 気になる（同じ対象はいまの記録を優先）
+  for (const inc of d.bookmarks) {
+    const targetId = inc.kind === 'bean' ? beanMap.get(inc.targetId) : inc.targetId;
+    if (!targetId || repo.findBookmark(inc.kind, targetId)) continue;
+    if (inc.kind === 'bean' && !repo.beans.has(targetId) && !d.beans.some((b) => b.id === inc.targetId)) continue;
+    ops.push(['put', 'bookmarks', { ...inc, targetId }]);
+    s.bookmarksAdded++;
+  }
+
+  // 比較（同じ2つの豆の組は1件）
+  for (const inc of d.comparisons) {
+    const ids = inc.beanIds.map((x) => beanMap.get(x));
+    if (ids.some((x) => !x)) continue;
+    const local = repo.findComparison(ids[0], ids[1]);
+    const tastingIds = (inc.tastingIds || [null, null]).map((t) => (t ? tastingMap.get(t) || null : null));
+    if (!local) { ops.push(['put', 'comparisons', { ...inc, beanIds: ids, tastingIds }]); s.comparisonsAdded++; }
+    else if (newer(inc, local)) { ops.push(['put', 'comparisons', { ...inc, id: local.id, beanIds: ids, tastingIds }]); s.comparisonsUpdated++; }
+  }
+
+  // 取り込み履歴（和集合）
+  const have = new Set((repo.settings.imports || []).map((i) => i.id));
+  const extra = (obj.settings?.imports || []).filter((i) => i && i.id && !have.has(i.id));
+  if (extra.length) ops.push(['put', 'meta', { ...repo.settings, key: 'settings', imports: [...(repo.settings.imports || []), ...extra] }]);
+
+  const changes = s.beansAdded + s.beansUpdated + s.tastingsAdded + s.tastingsUpdated + s.bookmarksAdded + s.comparisonsAdded + s.comparisonsUpdated;
+  return { summary: s, ops, changes };
+}
+
+export async function applyMerge(repo, plan) {
+  if (plan.ops.length) await repo.commit(plan.ops);
+  return plan.summary;
 }
