@@ -1,6 +1,8 @@
 // 一杯の線画。保存データと独立した、終了可能な起動演出。
 export const INTRO_KEY = 'tankyu-coffee:intro:lastShownDay:v1';
-export const DURATION = { full: 5200, short: 1000 };
+// 絵は常に同じ5.2秒の台本。再生時間だけを変える（初回10秒、2回目以降5秒）。
+export const SCENE_MS = 5200;
+export const DURATION = { full: 10000, short: 5000 };
 let seenDay = '';
 let activeIntro = null;
 
@@ -24,8 +26,8 @@ const visible = (t, a, b, fade = 130) => Math.min(progress(t, a, a + fade), 1 - 
 const mix = (a, b, u) => a + (b - a) * u;
 
 // 同じ時刻なら同じ絵になる。タイマーの積み重ねや端末のフレーム数に依存しない。
-export function sceneAt(time, mode = 'full') {
-  const t = mode === 'short' ? Math.min(time, 650) : time;
+export function sceneAt(time) {
+  const t = time;
   const millX = mix(259, 180, tween(t, 1500, 1740));
   const scoop = tween(t, 860, 1240);
   const plunge = tween(t, 650, 850);
@@ -37,7 +39,7 @@ export function sceneAt(time, mode = 'full') {
   const transfer = tween(t, 2630, 2880);
   return {
     t, millX, scoopX, scoopY, crankX, crankY,
-    bag: mode === 'short' ? 1 : 1 - tween(t, 1460, 1690),
+    bag: 1 - tween(t, 1460, 1690),
     flap: tween(t, 140, 350), aroma: visible(t, 240, 1450, 230),
     spoon: visible(t, 650, 1570), spoonTilt: 35 * tween(t, 1220, 1390),
     mill: visible(t, 1000, 2820), hand: visible(t, 1610, 2620),
@@ -49,7 +51,7 @@ export function sceneAt(time, mode = 'full') {
     kettle: visible(t, 3100, 4160), pour: visible(t, 3330, 4020, 120),
     bloom: tween(t, 3430, 3760), steam: visible(t, 4190, 4900, 200),
     caption: visible(t, 4290, 4950, 180), rule: tween(t, 4720, 5070),
-    opacity: mode === 'short' ? 1 - tween(time, 650, 1000) : 1 - tween(t, 4820, 5200),
+    opacity: 1 - tween(t, 4820, 5200),
   };
 }
 
@@ -87,8 +89,8 @@ function artwork() {
   </svg>`;
 }
 
-export function paintScene(root, time, mode = 'full') {
-  const s = sceneAt(time, mode);
+export function paintScene(root, time) {
+  const s = sceneAt(time);
   const p = (name) => root.querySelector(`[data-part="${name}"]`);
   const alpha = (name, value) => p(name).setAttribute('opacity', String(value));
   const transform = (name, value) => p(name).setAttribute('transform', value);
@@ -197,14 +199,14 @@ export function showIntro({ manual = false } = {}) {
       try {
         const elapsed = now-started;
         if (elapsed>=DURATION[mode]) { finish(); return; }
-        paintScene(layer,elapsed,mode);
+        paintScene(layer,elapsed*SCENE_MS/DURATION[mode]);
         frame=requestAnimationFrame(tick);
       } catch (error) { console.warn('起動演出を終了しました',error); finish(); }
     };
-    paintScene(layer,0,mode);
+    paintScene(layer,0);
     frame=requestAnimationFrame(tick);
     endTimer=setTimeout(finish,DURATION[mode]);
-    safetyTimer=setTimeout(finish,6500);
+    safetyTimer=setTimeout(finish,DURATION[mode]+1500);
     return { finish, mode };
   } catch (error) { finish(); throw error; }
 }

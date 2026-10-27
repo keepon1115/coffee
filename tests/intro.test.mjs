@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { japanDay, chooseIntro, sceneAt, DURATION } from '../app/js/intro.js';
+import { japanDay, chooseIntro, sceneAt, DURATION, SCENE_MS } from '../app/js/intro.js';
 
 test('日本時間の午前0時に表示日が切り替わる', () => {
   assert.equal(japanDay(new Date('2026-10-27T14:59:59Z')), '2026-10-27');
@@ -25,10 +25,13 @@ test('手の位置を与えるノブが2回転して同じ軸位置に戻る', (
   assert.ok(Math.abs(last.crankX-37)<1e-9);
   assert.equal(sceneAt(2450).millX,180);
 });
-test('全編・短縮版が終端で消え、豆から粉への受け渡しが連続する', () => {
-  assert.equal(sceneAt(DURATION.full).opacity,0);
-  assert.equal(sceneAt(DURATION.short,'short').opacity,0);
-  assert.equal(sceneAt(750,'short').mill,0);
+test('初回10秒・2回目以降5秒で、どちらも同じ台本を最後まで流す', () => {
+  assert.equal(DURATION.full,10000);
+  assert.equal(DURATION.short,5000);
+  assert.equal(sceneAt(SCENE_MS).opacity,0);
+  assert.ok(sceneAt(SCENE_MS*0.9).caption>0);
+});
+test('終端で消え、豆から粉への受け渡しが連続する', () => {
   assert.ok(sceneAt(2950).receiver>0 && sceneAt(2950).dripper>0);
   assert.ok(sceneAt(3500).pour>0);
   assert.ok(sceneAt(4500).caption>0);
