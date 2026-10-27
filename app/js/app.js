@@ -45,6 +45,14 @@ const ROUTES = [
 const TABS = [['note', '#/', 'ノート'], ['dict', '#/dict', '事典'], ['saved', '#/saved', '気になる']];
 
 const app = document.getElementById('app');
+let introModule;
+let bootFailed = false;
+// 任意の演出の読込に失敗しても、データ読込と通常起動を続ける。
+const introReady = import('./intro.js').then((module) => {
+  introModule = module;
+  if (!bootFailed) module.showIntro();
+  return module;
+}).catch((error) => { console.warn('起動演出を読み込めませんでした', error); return null; });
 const scrollMap = new Map();
 let ctx;
 let currentHash = '';
@@ -78,7 +86,9 @@ function render() {
   }
   shell(res);
   document.title = `${res.title} - 探究コーヒー`;
-  if (res.focus) res.focus.focus(); else document.getElementById('main')?.focus({ preventScroll: true });
+  if (!introModule?.isIntroActive()) {
+    if (res.focus) res.focus.focus(); else document.getElementById('main')?.focus({ preventScroll: true });
+  }
   window.scrollTo(0, path === '/' || path.startsWith('/dict') ? scrollMap.get(hash) || 0 : 0);
 }
 
@@ -107,6 +117,10 @@ async function boot() {
   }
   ctx = {
     repo, storageMode,
+    async replayIntro() {
+      try { (await introReady)?.showIntro({ manual: true }); }
+      catch (error) { console.warn(error); toast('アニメーションを表示できませんでした', { error: true }); }
+    },
     go(hash, { replace = false } = {}) {
       if (location.hash === hash) { render(); return; }
       if (replace) location.replace(hash); else location.hash = hash;
@@ -125,6 +139,8 @@ async function boot() {
 }
 
 boot().catch((e) => {
+  bootFailed = true;
+  introModule?.finishIntro('boot-error');
   console.error(e);
   app.replaceChildren(h('main', {}, h('div', { class: 'banner error', role: 'alert' }, h('strong', { text: '起動できませんでした' }), h('p', { text: String(e?.message || e) }))));
 });

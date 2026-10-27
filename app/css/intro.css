@@ -1,0 +1,25 @@
+/* 明るい紙の上で、一杯の所作だけが動く。 */
+.coffee-intro {
+  position: fixed; inset: 0; z-index: 1000;
+  background: #F7F3EB; color: #6B4B36;
+  display: grid; place-items: center;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  overflow: hidden; touch-action: manipulation;
+}
+.coffee-intro-center { width: min(100%, 340px); transform: translateY(-4vh); }
+.coffee-intro-art { display: block; width: 100%; height: auto; overflow: visible; }
+.coffee-intro-caption {
+  margin: 12px -8px 0; min-height: 32px; text-align: center; color: #382D25;
+  font: 500 clamp(16px, 4.4vw, 19px)/1.8 var(--serif, serif); letter-spacing: .05em;
+}
+.coffee-intro-skip {
+  position: absolute; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right));
+  min-height: 44px; min-width: 72px; padding: 8px 12px;
+  border: 0; background: transparent; color: #75695F; cursor: pointer;
+  font: 14px/1.6 var(--sans, sans-serif);
+}
+.coffee-intro-skip:hover { color: #382D25; }
+@media (max-height: 440px) {
+  .coffee-intro-center { width: min(70vh, 290px); transform: none; }
+  .coffee-intro-caption { margin-top: 0; }
+}

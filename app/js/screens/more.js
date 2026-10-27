@@ -175,6 +175,7 @@ function editReason(ctx, bm, done) {
 export function settings(ctx) {
   const { repo } = ctx;
   const root = h('div');
+  root.append(h('button', { class: 'btn btn-block', type: 'button', text: '起動アニメーションを見る', onClick: () => ctx.replayIntro() }));
   const last = repo.settings.lastBackupAt;
   root.append(
     h('h2', { style: 'margin-top:0', text: 'この端末の記録' }),
