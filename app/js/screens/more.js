@@ -7,6 +7,7 @@ import { comparisonCandidates, compareBeans, sortedBeans, findTerms } from '../r
 import { sortTastings, kindHref, enc, beanMeta, infoTag } from './common.js';
 import { buildBackup, backupFileName, validateBackup, restoreBackup, parseBackupText, buildCsv, planMerge, applyMerge } from '../backup.js';
 import { readXlsx } from '../xlsx.js';
+import { buildDateRepairPlan, applyDateRepair } from '../date-repair.js';
 import { parseSheet, buildPlan, applyPlan } from '../importer.js';
 import { notFound } from './note.js';
 import { illust } from '../illust.js';
@@ -303,9 +304,24 @@ export function importScreen(ctx) {
 
   function paint() {
     const plan = buildPlan(parsed, repo, { ...meta, inheritDate: inherit });
+    const repair = buildDateRepairPlan(parsed, repo, meta);
     const s = plan.summary;
     const sample = plan.items.filter((i) => i.action !== 'skip').slice(0, 6);
     out.replaceChildren(
+      h('section', { class: 'banner' },
+        h('h2', { text: '既存データの日付だけ補完' }),
+        h('p', { text: '2025年9月以降のExcelの空欄に、直前の年月の1日を使います。店名・生産国・名称で照合し、既存の記録日が空欄のものだけ補います。感想やメモの追記はそのまま残ります。' }),
+        h('p', { text: `補完できる記録 ${repair.items.length}件・照合できない行 ${repair.skipped.length}件` }),
+        repair.items.length ? h('details', {}, h('summary', { text: '補完する日付を見る' }),
+          h('ul', { class: 'small' }, repair.items.map((it) => h('li', { text: `${it.rowNumber}行目: ${[it.store, it.country, it.name].filter(Boolean).join(' ／ ')} → ${it.date.replaceAll('-', '/')}` })))) : null,
+        repair.skipped.length ? h('details', {}, h('summary', { text: '照合できない行を見る' }),
+          h('ul', { class: 'small' }, repair.skipped.map((it) => h('li', { text: `${it.rowNumber}行目: ${it.reason}` })))) : null,
+        h('p', { class: 'small', text: '元のExcelに由来する感想も日付が空なら同じ日に補完します。後から追加した感想の日付と、すでに入っている日付は保持します。' }),
+        h('button', { class: 'btn btn-primary btn-block', type: 'button', disabled: !repair.items.length, text: `日付だけ補完する（${repair.items.length}件）`, onClick: () => guarded(async () => {
+          const result = await applyDateRepair(repo, buildDateRepairPlan(parsed, repo, meta));
+          paint();
+          toast(`記録${result.beans}件・元の感想${result.tastings}件の日付を補完しました`);
+        }, '日付を補完できませんでした') })),
       h('h2', { text: '取り込みプレビュー' }),
       h('dl', { class: 'kv' },
         h('div', {}, h('dt', { text: 'ファイル' }), h('dd', { text: `${meta.fileName}（シート「${meta.sheetName}」）` })),
