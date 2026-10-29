@@ -9,6 +9,7 @@ import { sortedBeans } from '../related.js';
 import { beanCard, bookmarkButton, kindHref, enc, infoTag, sourceBlock, usageCounts, beansFor, storeKey, PDF_CHECKED } from './common.js';
 import { notFound } from './note.js';
 import { illust } from '../illust.js';
+import { wikipediaLink } from '../wikipedia.js';
 
 const state = { onlyNew: false };
 const STAGE_ART = { farm: 'cherry', processing: 'drying', roasting: 'roaster', brewing: 'dripper' };
@@ -90,6 +91,14 @@ function sec(heading, type, conf, ...content) {
   return h('section', {}, h('h2', {}, heading, ' ', infoTag(type, conf)), ...content);
 }
 
+function wikipediaBlock(kind, item) {
+  const link = wikipediaLink(kind, item);
+  if (!link) return null;
+  return h('aside', { class: 'note-box', 'aria-label': 'Wikipediaで詳しく調べる' },
+    extLink(link.href, link.label),
+    h('p', { class: 'small muted', style: 'margin:6px 0 0', text: '外部サイトを別タブで開きます。閲覧にはインターネット接続が必要です。' }));
+}
+
 function myBeans(ctx, kind, id, label) {
   const beans = sortedBeans(ctx.repo).filter((b) => beansFor(ctx.repo, kind, id).includes(b));
   const box = h('section', {}, h('h2', { text: 'あなたの記録' }));
@@ -117,10 +126,10 @@ export function article(ctx, { kind, id }) {
   const root = h('div');
   root.append(h('h1', { text: a.name }), h('div', { class: 'row', style: 'margin-bottom:6px' }, bookmarkButton(ctx, { kind, targetId: id, source: { kind, id, label: `${KIND_LABEL[kind]}「${a.name}」のページ` } })));
   if (a.en && kind === 'country') root.append(h('p', { class: 'muted small', style: 'margin:0', text: a.en }));
+  root.append(wikipediaBlock(kind, a));
 
   if (kind === 'country') {
-    root.append(h('p', { text: a.summary }));
-    if (a.stub) root.append(h('div', { class: 'banner', text: 'この国の詳しい解説は事典にまだありません（未収録）。記録の原文はそのまま残っています。' }));
+    root.append(h('p', { text: a.stub ? 'この産地の解説は準備中です。Wikipediaで詳しく調べられます。' : a.summary }));
     if (a.regions.length) {
       root.append(sec('産地の傾向', 'tendency', 'pdf',
         h('p', { class: 'small muted', text: '標高は「その地域のスペシャルティ・アラビカでよく見るおおよその帯域」で、農園単位では外れます。味は一般傾向で、個々のロットの味を保証するものではありません。' }),
@@ -132,7 +141,9 @@ export function article(ctx, { kind, id }) {
           h('div', {}, h('dt', { text: '個性を追いやすい焙煎' }), h('dd', { text: `${r.roast}（編集上の目安。優劣ではありません）` })))))));
       root.append(h('p', { class: 'small muted', text: '農園単位の情報は事典にありません。所在地や物語を推測で補わず、分かる国・地域までを表示しています。' }));
     }
-    root.append(sec('歴史・文化', a.history.type, a.history.conf || a.history.confidence, h('p', { class: 'pre', text: a.history.body })));
+    const missingHistory = /未収録/.test(a.history.body);
+    root.append(sec('歴史・文化', missingHistory ? null : a.history.type, a.history.conf || a.history.confidence,
+      h('p', { class: 'pre', text: missingHistory ? 'この産地の歴史・文化の解説は準備中です。Wikipediaで詳しく調べられます。' : a.history.body })));
     if (a.culture) root.append(h('div', { class: 'card' }, infoTag(a.culture.type, a.culture.confidence), h('p', { class: 'pre', style: 'margin:6px 0 0', text: a.culture.body })));
     if (a.hint) root.append(sec('探索のヒント', 'suggestion', 'pdf', h('p', { text: a.hint })));
     root.append(myBeans(ctx, 'country', id, `${a.name}の豆`));
@@ -220,6 +231,7 @@ export function journey(ctx, _p, query) {
   const line = h('div', { class: 'journey' });
   for (const st of JOURNEY) {
     const stage = h('section', { class: 'stage' }, h('h2', {}, illust(STAGE_ART[st.id], { cls: 'illust-inline' }), st.title), h('p', { class: 'muted', style: 'margin-top:0', text: st.lead }));
+    stage.append(wikipediaBlock('journey', st));
     for (const c of st.cards) {
       stage.append(h('details', { class: 'card' }, h('summary', {}, c.title, ' ', infoTag(c.type, c.conf)), h('p', { class: 'pre', text: c.body })));
     }
